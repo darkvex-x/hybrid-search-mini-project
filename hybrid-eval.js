@@ -1,8 +1,6 @@
-// Hybrid Search (RRF) mini project - STARTER
+// Hybrid Search (RRF) mini project
 // Goal: fuse keyword + semantic search with RRF, then compare all three systems.
-// Fill in the 4 TODOs. Run with:  node hybrid-eval.js
-// When your Summary row matches the answer key in the README, you are done.
-// You do NOT need a database or API keys: the ranked results are provided as data.
+// Run with:  node hybrid-eval.js
 
 const fs = require('fs');
 
@@ -22,13 +20,37 @@ const results = JSON.parse(fs.readFileSync('search-results.json', 'utf8'));
 // Given two ranked id-lists, return ONE fused id-list (highest RRF score first).
 // RRF score of a doc = sum over each list it appears in of 1 / (k + rank), rank is 1-based.
 function rrfFuse(keywordIds, semanticIds, k = 60) {
-  // ...
+  const scores = new Map();
+
+  // Score from keyword list
+  keywordIds.forEach((id, index) => {
+    const rank = index + 1; // 1-based
+    const current = scores.get(id) || 0;
+    scores.set(id, current + 1 / (k + rank));
+  });
+
+  // Score from semantic list
+  semanticIds.forEach((id, index) => {
+    const rank = index + 1; // 1-based
+    const current = scores.get(id) || 0;
+    scores.set(id, current + 1 / (k + rank));
+  });
+
+  // Sort by score descending
+  return Array.from(scores.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
 }
 
 // TODO 2: rank of the first correct id in a list (1-based), or null if none.
 // The optional `cutoff` limits how far down you look (use 10 for recall@10).
 function rankOf(ids, correctIds, cutoff = Infinity) {
-  // ...
+  for (let i = 0; i < ids.length && i < cutoff; i++) {
+    if (correctIds.includes(ids[i])) {
+      return i + 1; // 1-based rank
+    }
+  }
+  return null;
 }
 
 // helpers
@@ -48,8 +70,8 @@ for (const { query, correctIds } of testSet) {
 
   // TODO 3: for each system, push its reciprocal rank and count a recall@10 hit.
   for (const s of systems) {
-    // rrs[s].push(...)
-    // if (correct answer is within the top 10 of lists[s]) hits[s]++
+    rrs[s].push(rr(lists[s], correctIds));
+    if (rankOf(lists[s], correctIds, 10) !== null) hits[s]++;
   }
 
   rows.push({ query, kw: rankOf(kw, correctIds), sem: rankOf(sem, correctIds), hyb: rankOf(hyb, correctIds) });
@@ -59,4 +81,22 @@ for (const { query, correctIds } of testSet) {
 // (print 'miss' when the answer is not in a list), then a Summary row with each system's
 // MRR and Recall@10 rounded to 2 decimals.
 const n = testSet.length;
-// console.log(...)
+
+const fmt = rank => (rank === null ? 'miss' : String(rank));
+
+console.log('| Query | Keyword rank | Semantic rank | Hybrid rank |');
+console.log('|---|---|---|---|');
+
+for (const { query, kw, sem, hyb } of rows) {
+  console.log(`| ${query} | ${fmt(kw)} | ${fmt(sem)} | ${fmt(hyb)} |`);
+}
+
+const kwMRR  = mean(rrs.keyword).toFixed(2);
+const semMRR = mean(rrs.semantic).toFixed(2);
+const hybMRR = mean(rrs.hybrid).toFixed(2);
+
+const kwR10  = (hits.keyword  / n).toFixed(2);
+const semR10 = (hits.semantic / n).toFixed(2);
+const hybR10 = (hits.hybrid   / n).toFixed(2);
+
+console.log(`| **Summary** | **MRR ${kwMRR} · Recall@10 ${kwR10}** | **MRR ${semMRR} · Recall@10 ${semR10}** | **MRR ${hybMRR} · Recall@10 ${hybR10}** |`);

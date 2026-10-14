@@ -1,41 +1,17 @@
-# Hybrid Search Mini Project (BM25 + Vector with RRF)
+# Hybrid Search Mini Project – RRF Evaluation
 
-A tiny, self-contained mini project: fuse keyword and semantic search with **Reciprocal Rank Fusion (RRF)** and prove the hybrid beats each search alone. **No database or API keys needed** — each system's ranked results are provided as data.
+This mini project fuses keyword and semantic search results using **Reciprocal Rank Fusion (RRF)** and evaluates all three systems (keyword, semantic, hybrid) with **MRR** and **Recall@10** on a 10-query test set.
 
-## Files
-
-- `hybrid-eval.js` — the file you build (four TODOs; loading is done for you).
-- `test-set.csv` — 10 `(query, correct_post_ids)` pairs. Multiple correct ids are `;`-separated.
-- `search-results.json` — each system's **top-20** ranked `post_id` list per query: `{ "<query>": { "keyword": [...], "semantic": [...] } }`. Array position 0 is rank 1.
-- `posts-dataset.csv` — the 35 posts the ids refer to (for sanity-checking only).
-
-## What to build in `hybrid-eval.js`
-
-1. `rrfFuse(keywordIds, semanticIds, k = 60)` — merge two ranked lists into one. A doc's score is the sum of `1 / (k + rank)` over each list it appears in (rank is 1-based); sort by score, highest first.
-2. `rankOf(ids, correctIds, cutoff)` — 1-based rank of the first correct id, or `null`.
-3. For each query, build the hybrid list and record reciprocal rank + a recall@10 hit for **keyword, semantic, and hybrid**.
-4. Print a markdown table (keyword / semantic / hybrid rank per query, `miss` if not found) with a Summary row of MRR and Recall@10 per system.
-
-## Formulas
-
-```text
-RRF(doc)        = sum over each list of  1 / (k + rank of doc in that list)   [k = 60]
-Reciprocal Rank = 1 / (rank of the first correct answer)   [0 if not found]
-MRR             = average reciprocal rank over all queries
-Recall@10       = (queries whose correct answer is in the top 10) / (total queries)
-```
-
-## Run
+## How to Run
 
 ```bash
 node hybrid-eval.js
 ```
 
-## Answer key
+No database or API keys required. All ranked results are provided as fixture data in `search-results.json`.
 
-A correct solution prints:
+## Result Table
 
-```text
 | Query | Keyword rank | Semantic rank | Hybrid rank |
 |---|---|---|---|
 | my redis cache keeps showing old data | 8 | 1 | 1 |
@@ -49,6 +25,14 @@ A correct solution prints:
 | sql or nosql for a new product | 1 | 3 | 1 |
 | why does my redis memory keep climbing | 15 | 2 | 1 |
 | **Summary** | **MRR 0.33 · Recall@10 0.60** | **MRR 0.67 · Recall@10 1.00** | **MRR 0.90 · Recall@10 1.00** |
-```
 
-Hybrid (MRR 0.90) beats keyword (0.33) and semantic (0.67): fusion lifts consensus answers to the top, and because the lists are top-20, it rescues answers keyword buried past rank 10.
+## Interpretation
+
+The hybrid system is the clear overall winner, achieving an MRR of **0.90** — more than **2.7× better than keyword (0.33)** and roughly **34% better than semantic alone (0.67)**. A striking example of fusion lifting a result that neither system ranked first is **"my background jobs stop after every deploy"**: keyword buried the answer at rank 13 while semantic placed it at rank 2, yet hybrid surfaces it at rank 2 — the consensus signal from both lists boosts its combined RRF score above all items that only one system ranked highly. For **"why does my redis memory keep climbing"**, keyword placed the correct answer all the way at rank 15 (outside the top 10, meaning a Recall@10 miss), but because semantic had it at rank 2 and the search results went 20 deep (not just 10), RRF could still accumulate a winning score for that document and lift it to rank 1 in the hybrid list — a miss becomes a hit purely because both systems fetched top-20 candidates before fusion. Finally, hybrid does not put every answer at rank 1 because when both keyword and semantic rank a wrong document highly (strong consensus on the wrong answer), that wrong document's combined RRF score can still outpace the correct answer — as seen with **"why did my query get slower after I added an index"**, where the correct post lands at hybrid rank 2 rather than 1.
+
+## What the Code Does
+
+1. **`rrfFuse(keywordIds, semanticIds, k = 60)`** – For each document in either list, accumulates `1 / (k + rank)` from every list it appears in, then sorts by total score descending to produce one merged ranking.
+2. **`rankOf(ids, correctIds, cutoff)`** – Finds the 1-based position of the first correct answer within an optional cutoff window.
+3. **Metrics loop** – For each query, builds the hybrid list and records each system's reciprocal rank and whether the correct answer is in its top 10.
+4. **Markdown table** – Prints per-query ranks and a summary row with MRR and Recall@10 for all three systems.
